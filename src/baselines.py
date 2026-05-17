@@ -2,9 +2,6 @@ import numpy as np
 
 
 def random_tour(n, seed=None):
-    """
-    Generate a random TSP tour over nodes 0, 1, ..., n-1.
-    """
     rng = np.random.default_rng(seed)
     tour = list(range(n))
     rng.shuffle(tour)
@@ -12,10 +9,6 @@ def random_tour(n, seed=None):
 
 
 def nearest_neighbor(dist, start=0):
-    """
-    Build a tour using the nearest-neighbor heuristic.
-    Starts from `start`, then repeatedly visits the closest unvisited city.
-    """
     n = len(dist)
     visited = {start}
     tour = [start]
@@ -34,10 +27,6 @@ def nearest_neighbor(dist, start=0):
 
 
 def tour_length(tour, dist):
-    """
-    Compute the total length of a TSP tour, including the return edge to start.
-    Kept here so baselines.py can run independently during early development.
-    """
     total = 0.0
     n = len(tour)
 
@@ -48,10 +37,6 @@ def tour_length(tour, dist):
 
 
 def two_opt(tour, dist):
-    """
-    Improve a given tour using 2-opt local search.
-    Repeatedly reverses segments when doing so shortens the tour.
-    """
     best = tour[:]
     improved = True
 
@@ -175,3 +160,81 @@ def greedy_insertion(dist, start=0):
         unvisited.remove(best_city)
 
     return tour
+
+
+def multi_start_nearest_neighbor(dist):
+    n = len(dist)
+    best_tour = None
+    best_len = float("inf")
+
+    for start in range(n):
+        tour = nearest_neighbor(dist, start=start)
+        length = tour_length(tour, dist)
+        if length < best_len:
+            best_tour = tour
+            best_len = length
+
+    return best_tour, best_len
+
+
+def multi_start_greedy_insertion(dist):
+    n = len(dist)
+    best_tour = None
+    best_len = float("inf")
+
+    for start in range(n):
+        tour = greedy_insertion(dist, start=start)
+        length = tour_length(tour, dist)
+        if length < best_len:
+            best_tour = tour
+            best_len = length
+
+    return best_tour, best_len
+
+
+def simulated_annealing(
+    dist,
+    initial_tour=None,
+    seed=0,
+    iterations=5000,
+    initial_temp=None,
+    cooling_rate=0.995,
+):
+    rng = np.random.default_rng(seed)
+    n = len(dist)
+
+    if initial_tour is None:
+        current = nearest_neighbor(dist, start=seed % n)
+    else:
+        current = initial_tour[:]
+
+    current_len = tour_length(current, dist)
+    best = current[:]
+    best_len = current_len
+
+    if initial_temp is None:
+        nonzero = dist[dist > 0]
+        initial_temp = float(np.mean(nonzero)) if len(nonzero) else 1.0
+
+    temp = max(float(initial_temp), 1e-12)
+
+    for _ in range(iterations):
+        i, j = sorted(rng.choice(np.arange(1, n), size=2, replace=False))
+        if j - i == 1:
+            continue
+
+        a, b = current[i - 1], current[i]
+        c, d = current[j - 1], current[j % n]
+        delta = dist[a][c] + dist[b][d] - dist[a][b] - dist[c][d]
+
+        if delta < 0 or rng.random() < np.exp(-delta / temp):
+            current[i:j] = reversed(current[i:j])
+            current_len += delta
+
+            if current_len < best_len:
+                best = current[:]
+                best_len = current_len
+
+        temp = max(temp * cooling_rate, 1e-12)
+
+    return best, best_len
